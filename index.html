@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>আমার বাংলা দোকান (My Bengali Shop)</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background-color: #f8f8f8; color: #333; line-height: 1.6; }
+        h1, h2 { color: #5a2c00; text-align: center; margin-bottom: 25px; } /* Brownish for Bengali feel */
+        .container { display: flex; flex-wrap: wrap; justify-content: center; gap: 25px; max-width: 1200px; margin: 0 auto; }
+        .shop, .cart { flex: 1; min-width: 300px; max-width: 550px; border: 1px solid #ddd; padding: 25px; border-radius: 8px; background-color: #fff; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+        .item-card { border: 1px solid #eee; padding: 15px; margin-bottom: 12px; border-radius: 5px; background-color: #fdfdfd; display: flex; justify-content: space-between; align-items: center; transition: transform 0.2s ease; }
+        .item-card:hover { transform: translateY(-3px); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+        .item-info strong { color: #8b4513; font-size: 1.1em; } /* SaddleBrown */
+        .item-price { font-weight: bold; color: #008000; font-size: 1.1em; } /* Green for price */
+        .cart-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px dashed #eee; font-size: 0.95em; }
+        .cart-item span:first-child { flex-grow: 1; }
+        .cart-item button { margin-left: 8px; }
+        .cart-total { font-weight: bold; margin-top: 20px; padding-top: 15px; border-top: 1px solid #eee; text-align: right; font-size: 1.2em; color: #5a2c00; }
+        button { background-color: #4CAF50; color: white; border: none; padding: 8px 15px; text-align: center; text-decoration: none; display: inline-block; font-size: 14px; margin: 4px 2px; cursor: pointer; border-radius: 5px; transition: background-color 0.3s ease, transform 0.1s ease; }
+        button:hover { background-color: #45a049; transform: translateY(-1px); }
+        button:active { transform: translateY(0); }
+        button:disabled { background-color: #cccccc; cursor: not-allowed; }
+
+        .buy-btn { background-color: #007bff; }
+        .buy-btn:hover { background-color: #0056b3; }
+        .remove-btn { background-color: #dc3545; padding: 5px 10px; font-size: 12px; }
+        .remove-btn:hover { background-color: #c82333; }
+        .checkout-btn { background-color: #6772E5; margin-top: 20px; width: 100%; padding: 12px 0; font-size: 18px; font-weight: bold; }
+        .checkout-btn:hover { background-color: #5469d4; }
+
+        .price-change {
+            transition: color 0.2s ease-in-out;
+        }
+        .price-up { color: #28a745 !important; } /* Bootstrap success green */
+        .price-down { color: #dc3545 !important; } /* Bootstrap danger red */
+
+        #empty-cart-message { text-align: center; color: #666; font-style: italic; margin-top: 20px; }
+        .stripe-note { font-size: 0.85em; color: #666; text-align: center; margin-top: 15px; padding-top: 10px; border-top: 1px dashed #eee; }
+    </style>
+</head>
+<body>
+    <h1>আমার বাংলা দোকান (My Bengali Shop)</h1>
+
+    <div class="container">
+        <section class="shop">
+            <h2>দোকানের জিনিসপত্র (Shop Items)</h2>
+            <div id="shop-items-list">
+                <!-- Shop items will be rendered here by JS -->
+            </div>
+        </section>
+
+        <section class="cart">
+            <h2>আমার কেনাকাটা (My Cart)</h2>
+            <div id="cart-items-list">
+                <!-- Cart items will be rendered here by JS -->
+                <p id="empty-cart-message">আপনার ঝুড়ি খালি (Your cart is empty).</p>
+            </div>
+            <div class="cart-total">
+                মোট মূল্য (Total): <span id="cart-total-price">0.00</span> টাকা (TK)
+            </div>
+            <button id="checkout-button" class="checkout-btn" disabled>চেকআউট (Checkout)</button>
+            <p class="stripe-note">
+                <em>দ্রষ্টব্য (Note): Stripe checkout requires a valid Publishable Key and
+                is client-side simulation. No actual payment processing here.</em>
+            </p>
+        </section>
+    </div>
+
+    <!-- Stripe.js v3 -->
+    <script src="https://js.stripe.com/v3/"></script>
+    <script>
+        const STRIPE_PUBLISHABLE_KEY = 'pk_test_TYooMQauvdEDq54NiTgbOGBZ'; // Replace with your actual Stripe Publishable Key
+
+        const shopItems = [
+            { id: 'item_001', name: 'মিষ্টি (Mishti)', basePrice: 50.00, currentPrice: 50.00 },
+            { id: 'item_002', name: 'সিঙ্গারা (Singara)', basePrice: 15.00, currentPrice: 15.00 },
+            { id: 'item_003', name: 'রসগোল্লা (Rosogolla)', basePrice: 25.00, currentPrice: 25.00 },
+            { id: 'item_004', name: 'সন্দেশ (Shandesh)', basePrice: 30.00, currentPrice: 30.00 },
+            { id: 'item_005', name: 'চমচম (Chomchom)', basePrice: 40.00, currentPrice: 40.00 }
+        ];
+
+        let cart = {}; // Stores { itemId: { item, quantity } }
+
+        const shopItemsListDiv = document.getElementById('shop-items-list');
+        const cartItemsListDiv = document.getElementById('cart-items-list');
+        const cartTotalPriceSpan = document.getElementById('cart-total-price');
+        const emptyCartMessage = document.getElementById('empty-cart-message');
+        const checkoutButton = document.getElementById('checkout-button');
+
+        let stripe;
+        try {
+             stripe = Stripe(STRIPE_PUBLISHABLE_KEY);
+        } catch (e) {
+            console.error("Stripe initialization failed. Check your publishable key.", e);
+            alert("Stripe initialization failed. Checkout will not work. Please check the console for details.");
+            checkoutButton.disabled = true;
+        }
+
+        // Generates a new price with a random fluctuation around the base price
+        function generateDynamicPrice(basePrice) {
+            const fluctuationPercentage = 0.15; // Prices can fluctuate +/- 15%
+            // Random value between -fluctuationPercentage and +fluctuationPercentage
+            const change = (Math.random() * 2 - 1) * fluctuationPercentage * basePrice;
+            let newPrice = basePrice + change;
+            return Math.max(1, newPrice).toFixed(2); // Ensure price is at least 1 and 2 decimal places
+        }
+
+        // Renders or re-renders all shop items
+        function renderShopItems() {
+            shopItemsListDiv.innerHTML = '';
+            shopItems.forEach(item => {
+                const itemCard = document.createElement('div');
+                itemCard.className = 'item-card';
+                itemCard.innerHTML = `
+                    <div class="item-info">
+                        <strong>${item.name}</strong><br>
+                        Price: <span id="price_${item.id}" class="item-price">${item.currentPrice.toFixed(2)}</span> টাকা (TK)
+                    </div>
+                    <button class="buy-btn" onclick="addToCart('${item.id}')">Add to Cart</button>
+                `;
+                shopItemsListDiv.appendChild(itemCard);
+            });
+        }
+
+        // Updates prices for all shop items and reflects changes in the DOM
+        function updateAllPrices() {
+            shopItems.forEach(item => {
+                const oldPrice = item.currentPrice;
+                item.currentPrice = parseFloat(generateDynamicPrice(item.basePrice));
+                const priceSpan = document.getElementById(`price_${item.id}`);
+
+                if (priceSpan) {
+                    priceSpan.textContent = item.currentPrice.toFixed(2);
+                    // Add visual feedback for price change
+                    priceSpan.classList.remove('price-up', 'price-down');
+                    if (item.currentPrice > oldPrice) {
+                        priceSpan.classList.add('price-up');
+                    } else if (item.currentPrice < oldPrice) {
+                        priceSpan.classList.add('price-down');
+                    }
+                    // Remove class after a short delay
+                    setTimeout(() => {
+                        priceSpan.classList.remove('price-up', 'price-down');
+                    }, 500);
+                }
+            });
+            renderCart(); // Re-render cart to update prices and total based on new dynamic prices
+        }
+
+        // Adds an item to the cart or increments its quantity
+        function addToCart(itemId) {
+            const item = shopItems.find(i => i.id === itemId);
+            if (item) {
+                if (cart[itemId]) {
+                    cart[itemId].quantity++;
+                } else {
+                    // Store a clone of the item, but its price will be updated by renderCart
+                    cart[itemId] = { item: { ...item }, quantity: 1 };
+                }
+                renderCart();
+            }
+        }
+
+        // Updates the quantity of an item in the cart
+        function updateCartItemQuantity(itemId, change) {
+            if (cart[itemId]) {
+                cart[itemId].quantity += change;
+                if (cart[itemId].quantity <= 0) {
+                    delete cart[itemId]; // Remove item if quantity drops to 0 or below
+                }
+                renderCart();
+            }
+        }
+
+        // Renders or re-renders the shopping cart display
+        function renderCart() {
+            cartItemsListDiv.innerHTML = '';
+            let total = 0;
+            const cartItemIds = Object.keys(cart);
+
+            if (cartItemIds.length === 0) {
+                emptyCartMessage.style.display = 'block';
+                checkoutButton.disabled = true;
+            } else {
+                emptyCartMessage.style.display = 'none';
+                checkoutButton.disabled = false;
+                cartItemIds.forEach(itemId => {
+                    const cartItem = cart[itemId];
+                    // Get the latest dynamic price from the shopItems list
+                    const currentShopItem = shopItems.find(i => i.id === itemId);
+                    // Update the cart item's price to reflect current market price
+                    if (currentShopItem) {
+                        cartItem.item.currentPrice = currentShopItem.currentPrice;
+                    }
+
+                    const itemTotal = cartItem.item.currentPrice * cartItem.quantity;
+                    total += itemTotal;
+
+                    const cartItemDiv = document.createElement('div');
+                    cartItemDiv.className = 'cart-item';
+                    cartItemDiv.innerHTML = `
+                        <span>
+                            ${cartItem.item.name} x ${cartItem.quantity}
+                            (${cartItem.item.currentPrice.toFixed(2)} TK each)
+                        </span>
+                        <span>
+                            ${itemTotal.toFixed(2)} TK
+                            <button class="remove-btn" onclick="updateCartItemQuantity('${itemId}', -1)">-</button>
+                            <button class="buy-btn" onclick="updateCartItemQuantity('${itemId}', 1)">+</button>
+                        </span>
+                    `;
+                    cartItemsListDiv.appendChild(cartItemDiv);
+                });
+            }
+            cartTotalPriceSpan.textContent = total.toFixed(2);
+        }
+
+        // Initiates the Stripe checkout process
+        async function checkout() {
+            if (Object.keys(cart).length === 0) {
+                alert("আপনার ঝুড়ি খালি (Your cart is empty)!");
+                return;
+            }
+
+            if (!stripe) {
+                alert("Stripe is not initialized. Cannot proceed with checkout.");
+                return;
+            }
+
+            const lineItems = Object.keys(cart).map(itemId => {
+                const cartItem = cart[itemId];
+                return {
+                    price_data: {
+                        currency: 'bdt', // Assuming Bangladeshi Taka (BDT)
+                        product_data: {
+                            name: cartItem.item.name,
+                        },
+                        unit_amount: Math.round(cartItem.item.currentPrice * 100), // Stripe expects prices in cents
+                    },
+                    quantity: cartItem.quantity,
+                };
+            });
+
+            try {
+                const { error } = await stripe.redirectToCheckout({
+                    lineItems: lineItems,
+                    mode: 'payment',
+                    successUrl: window.location.origin + '/success.html', // Placeholder URL for successful payment
+                    cancelUrl: window.location.origin + '/cancel.html',   // Placeholder URL for cancelled payment
+                });
+
+                if (error) {
+                    console.error('Stripe checkout error:', error.message);
+                    alert('Checkout failed: ' + error.message);
+                }
+            } catch (e) {
+                console.error('Error during Stripe redirect:', e);
+                alert('An unexpected error occurred during checkout. Please try again.');
+            }
+        }
+
+        // Initialize the application when the DOM is fully loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            renderShopItems();
+            renderCart();
+            setInterval(updateAllPrices, 1000); // Update prices every second
+            checkoutButton.addEventListener('click', checkout);
+        });
+    </script>
+</body>
+</html>
